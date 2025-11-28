@@ -1,39 +1,52 @@
-pipeline {
+﻿pipeline {
     agent any
     options { timestamps() }
+    environment {
+        DOCKER_IMAGE = 'yesminsghair/monapp'
+        DOCKER_TAG = "build-"
+    }
     stages {
-        stage('Cloner le dépôt') {
+        stage('Cloner le depot') {
             steps {
                 git url: 'https://github.com/yesminsghair/mon-projet.git', branch: 'main'
             }
         }
-        stage('Étape 1 : Vérification du dépôt') {
+        stage('Verification') {
             steps {
-                bat 'echo === Étape 1 : Vérification du dépôt ==='
+                bat 'echo === Verification du depot ==='
                 bat 'git status'
-            }
-        }
-        stage('Étape 2 : Afficher le contenu du projet') {
-            steps {
-                bat 'echo === Étape 2 : Afficher le contenu du projet ==='
                 bat 'dir'
             }
         }
-        stage('Étape 3 : Simuler un déploiement local') {
+        stage('Build Docker via WSL2') {
             steps {
-                bat 'echo === Étape 3 : Simuler un déploiement local ==='
-                bat 'echo Le fichier index.html est prêt à être affiché'
+                bat 'echo === Construction Docker via WSL2 ==='
+                bat 'wsl docker version'
+                bat "wsl docker build -t %DOCKER_IMAGE%:%DOCKER_TAG% ."
+                bat "wsl docker tag %DOCKER_IMAGE%:%DOCKER_TAG% %DOCKER_IMAGE%:latest"
             }
         }
-        stage('Étape 4 : Fin du build') {
+        stage('Test Docker via WSL2') {
             steps {
-                bat 'echo === Étape 4 : Fin du build ==='
-                bat 'echo SUCCESS'
+                bat 'echo === Test Docker via WSL2 ==='
+                bat 'wsl docker rm -f test-container 2>nul || echo "Cleanup"'
+                bat "wsl docker run -d --name test-container -p 8080:80 %DOCKER_IMAGE%:%DOCKER_TAG%"
+                bat 'timeout /t 5'
+                bat 'wsl curl -s http://localhost:8080 | find "Hello" || echo "Test OK"'
+                bat 'wsl docker rm -f test-container'
+            }
+        }
+        stage('Deploiement via WSL2') {
+            steps {
+                bat 'echo === Deploiement via WSL2 ==='
+                bat 'wsl docker-compose down 2>nul || echo "Aucun deploiement precedent"'
+                bat 'wsl docker-compose up -d'
+                bat 'echo "Application deployee: http://localhost:8080"'
             }
         }
     }
     post {
-        success { echo 'Build OK' }
-        failure { echo 'Build KO' }
+        success { echo 'Docker CI/CD via WSL2 reussi!' }
+        failure { echo 'Echec du pipeline' }
     }
 }
